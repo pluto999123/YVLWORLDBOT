@@ -180,7 +180,7 @@ def cmd_start(message):
     # Fifth row: Updates and Support side-by-side
     if UPDATES_CHANNEL:
         kb.add(types.InlineKeyboardButton("📢 Stock Updates", url=UPDATES_CHANNEL),
-               types.InlineKeyboardButton("🆘 Support", url=SUPPORT_CHAT or "https://t.meyvlsupport"))
+               types.InlineKeyboardButton("🆘 Support", url=SUPPORT_CHAT or "https://t.me/yvlsupport"))
     else:
         kb.add(types.InlineKeyboardButton("📢 Stock Updates", callback_data="no_updates"),
                types.InlineKeyboardButton("🆘 Support", callback_data="no_support"))
@@ -191,7 +191,7 @@ def cmd_start(message):
 
     bot.send_message(user_id,
                      f"⚡ Welcome {message.from_user.first_name} to <b>YVL WORLD</b>! ⚡\n\n"
-                     "Buy in just seconds!!\n\n"
+                     "One Stop Shop For All Prepaids\n\n"
                      "🌟 Earn $2 for each friend you refer!\n"
                      "Use /ref to get your referral link",
                      reply_markup=kb)
