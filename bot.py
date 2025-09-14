@@ -251,16 +251,19 @@ def cb_referral(call):
     kb = types.InlineKeyboardMarkup()
     kb.add(types.InlineKeyboardButton("🔙 Back", callback_data="back_to_menu"))
 
+    msg = (
+        f"🎉 <b>Referral Program</b>\n\n"
+        f"Invite friends and earn <b>$2</b> each!\n\n"
+        f"🔗 Your referral link:\n{ref_link}"
+    )
+
     bot.send_message(
-        call.from_user.id,
-        f"🎉 <b>Referral Program</b>\n\nInvite friends with your link:\n{ref_link}\n\n"
-        "Earn $2.00 when they join!",
+        uid,
+        msg,
         parse_mode="HTML",
         reply_markup=kb
     )
 
-
-# ---- My Orders ----
 @bot.callback_query_handler(func=lambda c: c.data == "my_orders")
 def cb_my_orders(call):
     bot.answer_callback_query(call.id)
