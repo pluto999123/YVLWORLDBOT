@@ -241,6 +241,39 @@ def cb_profile(call):
         reply_markup=kb
     )
 
+# ---- My Orders ----
+@bot.callback_query_handler(func=lambda c: c.data == "my_orders")
+def cb_my_orders(call):
+    bot.answer_callback_query(call.id)
+    uid = call.from_user.id
+
+    cursor.execute(
+        "SELECT id, brand, value, price, created_at FROM giftcards WHERE buyer_id=? ORDER BY created_at DESC LIMIT 10",
+        (uid,)
+    )
+    rows = cursor.fetchall()
+
+    if not rows:
+        bot.send_message(uid, "📭 You have no past orders.")
+        return
+
+    text_lines = ["📦 <b>Your Last 10 Orders</b>\n"]
+    for order_id, brand, value, price, created_at in rows:
+        text_lines.append(
+            f"#{order_id} | {brand} | Value: ${value} | Price: ${price} | {created_at}"
+        )
+
+    kb = types.InlineKeyboardMarkup()
+    kb.add(types.InlineKeyboardButton("🔙 Back", callback_data="back_to_menu"))
+
+    bot.send_message(
+        uid,
+        "\n".join(text_lines),
+        parse_mode="HTML",
+        reply_markup=kb
+    )
+
+
 # ---- Referral ----
 @bot.callback_query_handler(func=lambda c: c.data == "referral")
 def cb_referral(call):
@@ -264,42 +297,6 @@ def cb_referral(call):
         reply_markup=kb
     )
 
-@bot.callback_query_handler(func=lambda c: c.data == "my_orders")
-def cb_my_orders(call):
-    bot.answer_callback_query(call.id)
-    uid = call.from_user.id
-
-    cursor.execute(
-        "SELECT id, brand, value, price, created_at FROM giftcards "
-        "WHERE buyer_id=? ORDER BY created_at DESC LIMIT 10",
-        (uid,)
-    )
-    rows = cursor.fetchall()
-
-    if not rows:
-        bot.send_message(uid, "📭 You have no past orders.")
-        return
-
-    text_lines = ["📦 <b>Your Last 10 Orders</b>\n"]
-    for order_id, brand, value, price, created_at in rows:
-        text_lines.append(f"#{order_id} | {brand} | Value: ${value} | Price: ${price} | {created_at}")
-
-    kb = types.InlineKeyboardMarkup()
-    kb.add(types.InlineKeyboardButton("🔙 Back", callback_data="back_to_menu"))
-
-    bot.send_message(uid, "\n".join(text_lines), parse_mode="HTML", reply_markup=kb)
-
-    kb = types.InlineKeyboardMarkup()
-    kb.add(types.InlineKeyboardButton("🔙 Back", callback_data="back_to_menu"))
-
-    bot.send_message(uid, msg, parse_mode="HTML", reply_markup=kb)msg = (
-        f"🎉 <b>Referral Program</b>\n\n"
-        f"Invite friends and earn <b>$2</b> each!\n\n"
-        f"🔗 Your referral link:\n{ref_link}"
-    )
-        parse_mode="HTML",
-        reply_markup=kb
-    )
 # ---- Deposit flow (BTC, LTC, SOL) ----
 @bot.callback_query_handler(func=lambda c: c.data == "menu_deposit")
 def cb_menu_deposit(call):
