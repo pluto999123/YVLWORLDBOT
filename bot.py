@@ -143,8 +143,7 @@ def update_deposit_txid_amount(deposit_id, txid, amount):
 def fetch_deposit(deposit_id):
     cursor.execute("SELECT id, user_id, coin, amount, txid, status FROM deposits WHERE id=?", (deposit_id,))
     return cursor.fetchone()
-
-# ---- Start handler (auto-referral) ----
+# ---- Start handler (auto-referral + menu) ----
 @bot.message_handler(commands=["start"])
 def cmd_start(message):
     user_id = message.from_user.id
@@ -153,39 +152,53 @@ def cmd_start(message):
     if len(args) > 1 and args[1].isdigit():
         inviter_id = int(args[1])
 
+    # Check if user exists, else create + handle referral
     cursor.execute("SELECT user_id FROM users WHERE user_id=?", (user_id,))
     if not cursor.fetchone():
         credit_referral_and_create_user(user_id, inviter_id)
+    else:
+        ensure_user_exists(user_id)
 
-    # main menu layout requested:
+    # ✅ Always show main menu with balance and buttons
+    send_main_menu(message)
+
+
+      # main menu layout (final):
     # Deposit (one row)
     # Listing (one row)
-    # Referral (one row)
-    # Profile (one row)
-    # Stock Updates + Support (side-by-side)
-    kb = types.InlineKeyboardMarkup(row_width=2)
+    # Referral + Stock Updates + Support (one row)
+    # Profile + My Orders (one row)
+    kb = types.InlineKeyboardMarkup(row_width=3)
 
-    # First row: Deposit alone
+    # First row: Deposit
     kb.add(types.InlineKeyboardButton("💰 Deposit", callback_data="menu_deposit"))
 
-    # Second row: Listing alone
+    # Second row: Listing
     kb.add(types.InlineKeyboardButton("🛒 Listing", callback_data="listing"))
 
-    # Third row: Referral alone
-    kb.add(types.InlineKeyboardButton("🎉 Referral Program", callback_data="referral"))
-
-    # Fourth row: Profile alone
-    kb.add(types.InlineKeyboardButton("👤 Profile", callback_data="profile"))
-
-    # Fifth row: Updates and Support side-by-side
+    # Third row: Referral + Stock Updates + Support
+    row = [
+        types.InlineKeyboardButton("🎉 Referral Program", callback_data="referral")
+    ]
     if UPDATES_CHANNEL:
-        kb.add(types.InlineKeyboardButton("📢 Stock Updates", url=UPDATES_CHANNEL),
-               types.InlineKeyboardButton("🆘 Support", url=SUPPORT_CHAT or "https://t.me/yvlsupport"))
+        row.append(types.InlineKeyboardButton("📢 Stock Updates", url=UPDATES_CHANNEL))
     else:
-        kb.add(types.InlineKeyboardButton("📢 Stock Updates", callback_data="no_updates"),
-               types.InlineKeyboardButton("🆘 Support", callback_data="no_support"))
+        row.append(types.InlineKeyboardButton("📢 Stock Updates", callback_data="no_updates"))
 
-    # Always add Admin Panel button for admin users (visible only to them)
+    if SUPPORT_CHAT:
+        row.append(types.InlineKeyboardButton("🆘 Support", url=SUPPORT_CHAT))
+    else:
+        row.append(types.InlineKeyboardButton("🆘 Support", callback_data="no_support"))
+
+    kb.add(*row)
+
+    # Fourth row: Profile + My Orders
+    kb.add(
+        types.InlineKeyboardButton("👤 Profile", callback_data="profile"),
+        types.InlineKeyboardButton("📦 My Orders", callback_data="my_orders")
+    )
+
+    # Admin Panel (admin only)
     if message.from_user.id == ADMIN_ID:
         kb.add(types.InlineKeyboardButton("👮 Admin Panel", callback_data="admin_panel"))
 
@@ -210,25 +223,62 @@ def cmd_ref(message):
         username = "<bot>"
     bot.send_message(uid, f"👥 Invite friends and earn $2 each!\n\nYour link:\nhttps://t.me/{username}?start={uid}")
 
-# ---- Profile & Referral UI ----
+# ---- Profile ----
 @bot.callback_query_handler(func=lambda c: c.data == "profile")
 def cb_profile(call):
     bot.answer_callback_query(call.id)
-    uid = call.from_user.id
-    ensure_user_exists(uid)
-    bal = fetch_user_balance(uid)
-    bot.send_message(uid, f"👤 Profile\n\n💰 Balance: <b>${bal:.2f}</b>")
+    cursor.execute("SELECT balance FROM users WHERE user_id=?", (call.from_user.id,))
+    r = cursor.fetchone()
+    balance = float(r[0]) if r and r[0] is not None else 0.0
 
+    kb = types.InlineKeyboardMarkup()
+    kb.add(types.InlineKeyboardButton("🔙 Back", callback_data="back_to_menu"))
+
+    bot.send_message(
+        call.from_user.id,
+        f"👤 <b>Your Profile</b>\n\n💵 Balance: ${balance:.2f}",
+        parse_mode="HTML",
+        reply_markup=kb
+    )
+
+# ---- Referral ----
 @bot.callback_query_handler(func=lambda c: c.data == "referral")
 def cb_referral(call):
     bot.answer_callback_query(call.id)
     uid = call.from_user.id
-    try:
-        username = bot.get_me().username
-    except Exception:
-        username = "<bot>"
-    bot.send_message(uid, f"🎉 Referral Program\n\nEarn $2 per friend!\nYour link: https://t.me/{username}?start={uid}")
+    ref_link = f"https://t.me/{BOT_USERNAME}?start={uid}"
 
+    kb = types.InlineKeyboardMarkup()
+    kb.add(types.InlineKeyboardButton("🔙 Back", callback_data="back_to_menu"))
+
+    bot.send_message(
+        # ---- My Orders ----
+@bot.callback_query_handler(func=lambda c: c.data == "my_orders")
+def cb_my_orders(call):
+    bot.answer_callback_query(call.id)
+    uid = call.from_user.id
+
+    cursor.execute("SELECT id, brand, value, price, created_at FROM giftcards WHERE buyer_id=? ORDER BY created_at DESC LIMIT 10", (uid,))
+    rows = cursor.fetchall()
+
+    if not rows:
+        msg = "📭 You have no past orders."
+    else:
+        msg = "🧾 <b>Your Last 10 Orders</b>\n\n"
+        for order_id, brand, value, price, created_at in rows:
+            msg += f"#{order_id} | {brand} | Value: ${value} | Price: ${price} | 🗓 {created_at}\n"
+
+    kb = types.InlineKeyboardMarkup()
+    kb.add(types.InlineKeyboardButton("🔙 Back", callback_data="back_to_menu"))
+
+    bot.send_message(uid, msg, parse_mode="HTML", reply_markup=kb)
+        uid,
+        f"🎉 <b>Referral Program</b>\n\n"
+        f"Invite friends and earn <b>$2</b> each!\n\n"
+        f"🔗 Your referral link:\n{ref_link}",
+        parse_mode="HTML",
+        reply_markup=kb
+    )
 # ---- Deposit flow (BTC, LTC, SOL) ----
 @bot.callback_query_handler(func=lambda c: c.data == "menu_deposit")
 def cb_menu_deposit(call):
@@ -238,6 +288,10 @@ def cb_menu_deposit(call):
     # This deposit menu will show coins 2-per-row as requested earlier.
     for coin in ["BTC", "LTC", "SOL"]:
         kb.add(types.InlineKeyboardButton(coin, callback_data=f"deposit|{coin}"))
+    
+    # 🔙 Back button to return to main menu
+    kb.add(types.InlineKeyboardButton("🔙 Back", callback_data="back_to_menu"))
+
     bot.send_message(call.from_user.id, "💰 Choose a coin to deposit:", reply_markup=kb)
 
 @bot.callback_query_handler(func=lambda c: c.data and c.data.startswith("deposit|"))
@@ -552,7 +606,6 @@ def cb_addbal(call):
     add_balance(uid, amt)
     bot.answer_callback_query(call.id, f"Adjusted {uid} by ${amt:+}")
     bot.send_message(ADMIN_ID, f"✅ Updated balance for {uid} by ${amt:+}")
-
 # ---- Listings: All / Brand / BIN / Refresh / Buy ----
 @bot.callback_query_handler(func=lambda c: c.data in ["listing", "refresh_all"])
 def cb_listing(call):
@@ -562,15 +615,25 @@ def cb_listing(call):
     if not rows:
         bot.send_message(call.from_user.id, "📭 No cards in stock.")
         return
+
     text_lines = ["🛒 <b>All Available Cards</b>\n"]
     kb = types.InlineKeyboardMarkup(row_width=1)
+
     for card_id, brand, value, price, bin_val in rows:
         text_lines.append(f"ID: {card_id} | {brand} | Value: ${value} | Price: ${price} | BIN: {bin_val or 'N/A'}")
         kb.add(types.InlineKeyboardButton(f"Buy {brand} ${value} for ${price}", callback_data=f"buy|{card_id}"))
-    kb.add(types.InlineKeyboardButton("📂 Filter by Brand", callback_data="filter_menu"),
-           types.InlineKeyboardButton("🔎 Search by BIN", callback_data="bin_menu"))
+
+    kb.add(
+        types.InlineKeyboardButton("📂 Filter by Brand", callback_data="filter_menu"),
+        types.InlineKeyboardButton("🔎 Search by BIN", callback_data="bin_menu")
+    )
     kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data="refresh_all"))
+
+    # 🔙 Back button
+    kb.add(types.InlineKeyboardButton("🔙 Back", callback_data="back_to_menu"))
+
     bot.send_message(call.from_user.id, "\n".join(text_lines), parse_mode="HTML", reply_markup=kb)
+
 
 @bot.callback_query_handler(func=lambda c: c.data == "filter_menu")
 def cb_filter_menu(call):
@@ -580,10 +643,15 @@ def cb_filter_menu(call):
     if not brands:
         bot.send_message(call.from_user.id, "📭 No brands in stock.")
         return
+
     kb = types.InlineKeyboardMarkup(row_width=2)
     for b in brands:
         kb.add(types.InlineKeyboardButton(b, callback_data=f"brand|{b}"))
     kb.add(types.InlineKeyboardButton("🔄 Refresh all", callback_data="refresh_all"))
+
+    # 🔙 Back button
+    kb.add(types.InlineKeyboardButton("🔙 Back", callback_data="back_to_menu"))
+
     bot.send_message(call.from_user.id, "📂 Choose a brand:", reply_markup=kb)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("brand|") or c.data.startswith("refresh_brand|"))
@@ -686,14 +754,29 @@ def cb_buy(call):
     if balance < price:
         bot.send_message(uid, "❌ Insufficient balance. Please deposit more.")
         return
+    
+    # Deduct balance and mark card as sold
     cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id=?", (price, uid))
     cursor.execute("UPDATE giftcards SET status='sold' WHERE id=?", (card_id,))
     conn.commit()
+
+    # ✅ Log the order in orders table
+    cursor.execute(
+        "INSERT INTO orders (user_id, item, price) VALUES (?, ?, ?)",
+        (uid, f"{brand} {value}", price)
+    )
+    conn.commit()
+
+    # Send card details to user
     try:
-        bot.send_message(uid,
-                         f"✅ Purchase successful!\n\n🏷 Brand: {brand}\n💳 Value: ${value}\n💵 Price: ${price}\n\n🔑 Your Code:\n<code>{code}</code>",
-                         parse_mode="HTML")
+        bot.send_message(
+            uid,
+            f"✅ Purchase successful!\n\n🏷 Brand: {brand}\n💳 Value: ${value}\n💵 Price: ${price}\n\n🔑 Your Code:\n<code>{code}</code>",
+            parse_mode="HTML"
+        )
     except Exception:
+        pass
+
         logging.exception("Failed to send code to user")
     try:
         if ADMIN_ID:
@@ -723,4 +806,5 @@ if __name__ == "__main__":
         bot.infinity_polling(skip_pending=True)
     except Exception:
         logging.exception("Bot stopped unexpectedly")
+
 
