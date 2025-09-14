@@ -180,7 +180,7 @@ def cmd_start(message):
     # Fifth row: Updates and Support side-by-side
     if UPDATES_CHANNEL:
         kb.add(types.InlineKeyboardButton("📢 Stock Updates", url=UPDATES_CHANNEL),
-               types.InlineKeyboardButton("🆘 Support", url=SUPPORT_CHAT or "https://t.me"))
+               types.InlineKeyboardButton("🆘 Support", url=SUPPORT_CHAT or "https://t.meyvlsupport"))
     else:
         kb.add(types.InlineKeyboardButton("📢 Stock Updates", callback_data="no_updates"),
                types.InlineKeyboardButton("🆘 Support", callback_data="no_support"))
