@@ -263,7 +263,6 @@ def cb_referral(call):
         parse_mode="HTML",
         reply_markup=kb
     )
-
 @bot.callback_query_handler(func=lambda c: c.data == "my_orders")
 def cb_my_orders(call):
     bot.answer_callback_query(call.id)
