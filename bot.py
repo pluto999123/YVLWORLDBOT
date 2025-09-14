@@ -291,8 +291,7 @@ def cb_my_orders(call):
     kb = types.InlineKeyboardMarkup()
     kb.add(types.InlineKeyboardButton("🔙 Back", callback_data="back_to_menu"))
 
-    bot.send_message(uid, msg, parse_mode="HTML", reply_markup=kb)
-        msg = (
+    bot.send_message(uid, msg, parse_mode="HTML", reply_markup=kb)msg = (
         f"🎉 <b>Referral Program</b>\n\n"
         f"Invite friends and earn <b>$2</b> each!\n\n"
         f"🔗 Your referral link:\n{ref_link}"
