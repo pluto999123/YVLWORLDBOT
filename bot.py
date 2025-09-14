@@ -252,21 +252,39 @@ def cb_referral(call):
     kb.add(types.InlineKeyboardButton("🔙 Back", callback_data="back_to_menu"))
 
     bot.send_message(
-        # ---- My Orders ----
+        call.from_user.id,
+        f"🎉 <b>Referral Program</b>\n\nInvite friends with your link:\n{ref_link}\n\n"
+        "Earn $2.00 when they join!",
+        parse_mode="HTML",
+        reply_markup=kb
+    )
+
+
+# ---- My Orders ----
 @bot.callback_query_handler(func=lambda c: c.data == "my_orders")
 def cb_my_orders(call):
     bot.answer_callback_query(call.id)
     uid = call.from_user.id
 
-    cursor.execute("SELECT id, brand, value, price, created_at FROM giftcards WHERE buyer_id=? ORDER BY created_at DESC LIMIT 10", (uid,))
+    cursor.execute(
+        "SELECT id, brand, value, price, created_at FROM giftcards "
+        "WHERE buyer_id=? ORDER BY created_at DESC LIMIT 10",
+        (uid,)
+    )
     rows = cursor.fetchall()
 
     if not rows:
-        msg = "📭 You have no past orders."
-    else:
-        msg = "🧾 <b>Your Last 10 Orders</b>\n\n"
-        for order_id, brand, value, price, created_at in rows:
-            msg += f"#{order_id} | {brand} | Value: ${value} | Price: ${price} | 🗓 {created_at}\n"
+        bot.send_message(uid, "📭 You have no past orders.")
+        return
+
+    text_lines = ["📦 <b>Your Last 10 Orders</b>\n"]
+    for order_id, brand, value, price, created_at in rows:
+        text_lines.append(f"#{order_id} | {brand} | Value: ${value} | Price: ${price} | {created_at}")
+
+    kb = types.InlineKeyboardMarkup()
+    kb.add(types.InlineKeyboardButton("🔙 Back", callback_data="back_to_menu"))
+
+    bot.send_message(uid, "\n".join(text_lines), parse_mode="HTML", reply_markup=kb)
 
     kb = types.InlineKeyboardMarkup()
     kb.add(types.InlineKeyboardButton("🔙 Back", callback_data="back_to_menu"))
@@ -806,5 +824,4 @@ if __name__ == "__main__":
         bot.infinity_polling(skip_pending=True)
     except Exception:
         logging.exception("Bot stopped unexpectedly")
-
 
